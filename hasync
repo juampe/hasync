@@ -1,0 +1,67 @@
+#!/bin/bash
+#HA sync clones periodicaly 2 nodes in a pacemaker+corosync cluster
+#This script must be modified to fit your needs. 
+#You should use it to to sync debian system software, not service data
+#For service data like a database use DRBD o something like that.
+#Please look at RESOURCE,MYEXCLUDE,ECLUDE an SERIVCES variables
+#is intended to run
+#Juan Pedro Paredes Caballero <juanpedro.paredes@gmail.com>
+
+#This the HA resource to stablish who is primary and who is standby
+RESOURCE="cluster-ip"
+#Exclude
+MYEXCLUDE="/etc/mysql/conf.d  /var/lib/mysql"
+#This variable permit to stop services while sync is in progress
+SERVICES=""
+
+#We take care thar is no other sync in progress
+killall -9 rsync 2>/dev/null
+
+#Who is PRIMARY and who is SECONDARY in a corosycn+pacemaker cluster?
+STATUS=`/usr/sbin/crm status`
+PRI=`/usr/sbin/crm status|/bin/grep $RESOURCE|/usr/bin/awk '{print $4}'`
+NODES=`/usr/sbin/crm status|/bin/grep Online|/bin/sed -e 's/Online: \[ //'|awk -F']' '{print $1}'`
+#Well, who is the local node and who is the remote for sync?
+LOC=`/bin/uname -n`
+REM=`/bin/echo $NODES|/bin/sed -e 's/ /\n/g'|/bin/grep -v "$LOC"`
+
+
+#System exlusions
+EXCLUDE=" /proc /sys /sys/fs/fuse/connections /sys/kernel/debug /sys/kernel/security /dev /dev/pts /dev/shm  /var/run /var/lock /lib/init/rw"
+EXCLUDE="$EXCLUDE /drbd /etc/hostname /etc/fstab /etc/inittab /etc/network/interfaces /etc/hostname /etc/mtab /etc/blkid.tab /etc/ha.d /etc/udev /boot /etc/corosync /etc/ha.d /var/lib/pengine /var/lib/heartbeat /etc/cron.d/ha-* /var/log"
+#Own exclusions
+EXCLUDE="$EXCLUDE $MYEXCLUDE"
+EXCLUDE=`/bin/echo "$EXCLUDE"|/bin/sed -e 's/ / --exclude=/g'`
+
+#INCLUDE="/var/foo/bar /var/bar/foo*"
+#INCLUDE=`/bin/echo "$EXCLUDE"|/bin/sed -e 's/ / --include=/g'`
+
+if [ -n "$PRI" -a -n "$REM" -a "$PRI" = "$REM" ]
+then
+	#Stop services before sync
+	for S in $SERVICES
+	do
+		/etc/init.d/$S stop
+	done
+	#Here we can take care about bandwidth used to sync
+	#Adding --bwlimit=10000 (in kps)
+	#We use the fairsync wrapper to rsync to minimize the use of IO and CPU
+	OPTS='--sockopts=SO_SNDBUF=2000000,SO_RCVBUF=2000000 --rsync-path="/usr/local/bin/fairsync"'
+	#If we pass the limit param to the script it only sync files 
+	#less than 512M
+	if [ "$1" = "limit" ]
+	then
+        	OPTS="$OPTS --max-size=512M"
+	fi
+
+	#SYNC!!!
+	#We take care about IO and CPU
+	cd /
+	/usr/bin/nice -n 19 /usr/bin/ionice -c3 /usr/bin/rsync -quav -D --delete-before $OPTS $EXCLUDE $INCLUDE $REM:/ .
+	
+	#Start services after sync
+	for S in $SERVICES
+        do
+                /etc/init.d/$S start
+        done
+fi

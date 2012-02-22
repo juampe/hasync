@@ -1,0 +1,24 @@
+Juan Pedro Paredes Caballero <juanpedro.paredes@gmail.com>
+
+HA sync clones periodicaly 2 nodes in a pacemaker+corosync cluster
+It should run periodically to sync cluster
+It takes care to not to load the cluster, limiting bandwidth, io and cpu
+This script must be modified to fit your needs.
+You should use it to to sync debian system software, not service data.
+You can use it with other flavours of UNIX but you need to adjust 
+the exclude paths to not sync the single node information.
+This script must be modified to fit your needs.
+For service data like a database use DRBD o something like that.
+Please look at RESOURCE,MYEXCLUDE,ECLUDE,SERVCCES and OPTS variables
+
+hasync expect to find fairsync in /usr/local/bin/
+
+hasync uses fairsync as a wra
+#This the HA resource to stablish who is primary and who is standby
+RESOURCE="cluster-ip"
+#Exclude
+MYEXCLUDE="/etc/mysql/conf.d  /var/lib/mysql"
+#This variable permit to stop services while sync is in progress
+SERVICES=""
+#We use the fairsync wrapper to rsync to minimize the use of IO and CPU
+OPTS='--sockopts=SO_SNDBUF=2000000,SO_RCVBUF=2000000 --rsync-path="/usr/local/bin/fairsync"'

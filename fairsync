@@ -1,0 +1,4 @@
+#!/bin/sh
+#Juan Pedro Paredes Caballero <juanpedro.paredes@gmail.com>
+#This is a wrapper to rsync to minimize the use of IO and CPU
+/usr/bin/nice -n 19 /usr/bin/ionice -c3 /usr/bin/rsync $*
